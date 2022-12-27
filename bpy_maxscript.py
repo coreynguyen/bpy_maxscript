@@ -5,17 +5,87 @@
 # maxscript. This is to make porting my old maxscripts
 # easier, so alot of these functions may be redundant..
 # ====================================================================================
+# ChangeLog:
+#   2022-12-24
+#       fixed bad indents from using pyCharm to format the indents lol... fuuukk
+#       additional tweaks to the maxscript module, changed mesh validate
 #
+#   2022-12-23
+#       Code was reformated in pyCharm, added a few more functions;
+#       matchpattern, format, hide, unhide, freeze, unfreeze, select
+#
+#
+# ====================================================================================
 
 from pathlib import Path  # Needed for os stuff
 import random
 import struct  # Needed for Binary Reader
 import math
 import bpy
+import mathutils  # this i'm guessing is a branch of the bpy module specifically for math operations
+import os
 
 signed, unsigned = 0, 1  # Enums for read function
 seek_set, seek_cur, seek_end = 0, 1, 2  # Enums for seek function
 SEEK_ABS, SEEK_REL, SEEK_END = 0, 1, 2  # Enums for seek function
+on, off = True, False
+
+
+def format(text="", args=[]):
+    # prints in blender are annoying this is a hack so i don't have to keep explicitly denoting the type
+    ns = ""
+    i = 0
+    if len(text) > 1 and text[len(text) - 1:len(text)] == "\n":
+        text = text[0:-1]
+    
+    isArr = (type(args).__name__ == "tuple" or type(args).__name__ == "list")
+    
+    if isArr == True and len(args) > 0:
+        for s in text:
+            t = s
+            if s == "%":
+                if i < len(args):
+                    t = str(args[i])
+                elif i == 0:
+                    t = str(args)
+                else:
+                    t = ""
+                i = i + 1
+            ns = ns + t
+        print(ns)
+    elif text.find("%") > -1:
+        for s in text:
+            t = s
+            if s == "%":
+                if i == 0:
+                    t = str(args)
+                else:
+                    t = ""
+                i = i + 1
+            ns = ns + t
+        print(ns)
+    else:
+        print(text)
+    return None
+
+def subString (s, start=0, end=-1, base=1):
+    # base is a starting index of 1 as used in maxscript
+    start -= base
+    if start < 0: start = 0
+    if end > -1: end += start
+    else: end = len(s)
+    return s[start:end:1]
+
+
+def matchPattern(s="", pattern="", ignoreCase=True):
+    # This is a hack, this does not function the same as in maxscript
+    isfound = False
+    pattern = pattern.replace('*', '')
+    if ignoreCase:
+        if s.lower().find(pattern.lower()) != -1: isfound = True
+    else:
+        if s.find(pattern) != -1: isfound = True
+    return isfound
 
 
 def as_filename(name):  # could reuse for other presets
@@ -36,17 +106,20 @@ def rancol4():
 def rancol3():
     return (random.uniform(0.0, 1.0), random.uniform(0.0, 1.0), random.uniform(0.0, 1.0))
 
-def ceil (num):
+
+def ceil(num):
     n = float(int(num))
     if num > n: n += 1.0
     return n
+
 
 def cross(vec1=(0.0, 0.0, 0.0), vec2=(0.0, 0.0, 0.0)):
     return (
         vec2[1] * vec1[2] - vec2[2] * vec1[1],
         vec2[2] * vec1[0] - vec2[0] * vec1[2],
         vec2[0] * vec1[1] - vec2[1] * vec1[0]
-        )
+    )
+
 
 def dot(a=(0.0, 0.0, 0.0), b=(0.0, 0.0, 0.0)):
     return sum(map(lambda pair: pair[0] * pair[1], zip(a, b)))
@@ -70,16 +143,19 @@ def sqrt(n=0.0, l=0.001):
     # return root
     return math.sqrt(n)
 
+
 def normalize(vec=(0.0, 0.0, 0.0)):
     div = sqrt((vec[0] * vec[0]) + (vec[1] * vec[1]) + (vec[2] * vec[2]))
     return (
         (vec[0] / div) if vec[0] != 0 else 0.0,
         (vec[1] / div) if vec[1] != 0 else 0.0,
         (vec[2] / div) if vec[2] != 0 else 0.0
-        )
+    )
 
-def max(val1 = 0.0, val2 = 0.0):
+
+def max(val1=0.0, val2=0.0):
     return val1 if val1 > val2 else val2
+
 
 def distance(vec1=(0.0, 0.0, 0.0), vec2=(0.0, 0.0, 0.0)):
     return (sqrt((pow(vec2[0] - vec1[0], 2)) + (pow(vec2[1] - vec1[1], 2)) + (pow(vec2[2] - vec1[2], 2))))
@@ -95,7 +171,7 @@ def degToRad(degree):
     return math.radians(degree)
 
 
-def bit():
+class bit:
     def And(integer1, integer2): return (integer1 & integer2)
 
     def Or(integer1, integer2): return (integer1 | integer2)
@@ -110,7 +186,7 @@ def bit():
 
     def Shift(integer1, integer2): return ((integer1 >> -integer2) if integer2 < 0 else (integer1 << integer2))
 
-    def CharAsInt(string): return ord(int(string))
+    def CharAsInt(string): return ord(str(string))
 
     def IntAsChar(integer): return chr(int(integer))
 
@@ -122,23 +198,66 @@ def bit():
 def delete(objName):
     select(objName)
     bpy.ops.object.delete(use_global=False)
-    
-    
+
+
 def delete_all():
-    if( len(bpy.data.objects) != 0 ):
-        bpy.ops.object.select_all(action = 'SELECT')
-        bpy.ops.object.delete(use_global=False)
+    import bpy
+    
+    for obj in bpy.context.scene.objects:
+        
+        bpy.data.objects.remove(obj, do_unlink=True)
+    return None
+
+
+
+
+class LayerProperties:
+    layer = None
+    
+    def __init__(self, name = ""):
+        self.layer = bpy.data.collections.get(name)
+    
+    def addNode (self, obj = None):
+        result = False
+        if obj != None and self.layer != None:
+            
+            # Loop through all collections the obj is linked to
+            for col in obj.users_collection:
+                # Unlink the object
+                col.objects.unlink(obj)
+
+            # Link each object to the target collection
+            self.layer.objects.link(obj)
+            result = True
+        return result
+    
+    
+class LayerManager:
+    
+    def getLayerFromName (name = ""):
+        col = bpy.data.collections.get(name)
+        result = None
+        if col: result = LayerProperties(col.name)
+        return result
+    
+    def newLayerFromName (name = ""):
+        col = bpy.data.collections.new(name)
+        col.name = name
+        bpy.context.scene.collection.children.link(col)
+        bpy.context.view_layer.update()
+        return LayerProperties(col.name)
+
 
 class dummy:
     object = None
 
-    def __init__(self, position = (0.0, 0.0, 0.0)):
-        self.object = bpy.data.objects.new("Empty", None )
+    def __init__(self, position=(0.0, 0.0, 0.0)):
+        self.object = bpy.data.objects.new("Empty", None)
         bpy.context.scene.collection.objects.link(self.object)
         self.object.empty_display_size = 1
         self.object.empty_display_type = 'CUBE'
         self.object.location = position
-        
+
     def position(self, pos=(0.0, 0.0, 0.0)):
         if self.object != None: self.object.location = pos
 
@@ -163,7 +282,7 @@ class matrix3:
             self.row1 = [0.0, 0.0, 0.0]
             self.row2 = [0.0, 0.0, 0.0]
             self.row3 = [0.0, 0.0, 0.0]
-            self.row4 = [0.0, 0.0, 0.0]
+            
         elif rowA == 1:
             self.row1 = [1.0, 0.0, 0.0]
             self.row2 = [0.0, 1.0, 0.0]
@@ -190,7 +309,11 @@ class matrix3:
                 ", " + str(self.row4[1]) +
                 ", " + str(self.row4[2]) + "])"
         )
-
+    
+    def position (self, vec = [0.0, 0.0, 0.0]):
+        self.row4 = [vec[0], vec[1], vec[2]]
+        return None
+    
     def asMat3(self):
         return (
             (self.row1[0], self.row1[1], self.row1[2]),
@@ -198,7 +321,7 @@ class matrix3:
             (self.row3[0], self.row3[1], self.row3[2]),
             (self.row4[0], self.row4[1], self.row4[2])
         )
-
+    
     def asMat4(self):
         return (
             (self.row1[0], self.row1[1], self.row1[2], 0.0),
@@ -324,29 +447,52 @@ class matrix3:
     def multiply(self, B):
         C = matrix3()
         A_row1_3, A_row2_3, A_row3_3, A_row4_3 = 0.0, 0.0, 0.0, 1.0
-        C.row1 = [
-            self.row1[0] * B.row1[0] + self.row1[1] * B.row2[0] + self.row1[2] * B.row3[0] + A_row1_3 * B.row4[0],
-            self.row1[0] * B.row1[1] + self.row1[1] * B.row2[1] + self.row1[2] * B.row3[1] + A_row1_3 * B.row4[1],
-            self.row1[0] * B.row1[2] + self.row1[1] * B.row2[2] + self.row1[2] * B.row3[2] + A_row1_3 * B.row4[2]
-            ]
-        C.row2 = [
-            self.row2[0] * B.row1[0] + self.row2[1] * B.row2[0] + self.row2[2] * B.row3[0] + A_row2_3 * B.row4[0],
-            self.row2[0] * B.row1[1] + self.row2[1] * B.row2[1] + self.row2[2] * B.row3[1] + A_row2_3 * B.row4[1],
-            self.row2[0] * B.row1[2] + self.row2[1] * B.row2[2] + self.row2[2] * B.row3[2] + A_row2_3 * B.row4[2],
-            ]
-        C.row3 = [
-            self.row3[0] * B.row1[0] + self.row3[1] * B.row2[0] + self.row3[2] * B.row3[0] + A_row3_3 * B.row4[0],
-            self.row3[0] * B.row1[1] + self.row3[1] * B.row2[1] + self.row3[2] * B.row3[1] + A_row3_3 * B.row4[1],
-            self.row3[0] * B.row1[2] + self.row3[1] * B.row2[2] + self.row3[2] * B.row3[2] + A_row3_3 * B.row4[2]
-            ]
-        C.row4 = [
-            self.row4[0] * B.row1[0] + self.row4[1] * B.row2[0] + self.row4[2] * B.row3[0] + A_row4_3 * B.row4[0],
-            self.row4[0] * B.row1[1] + self.row4[1] * B.row2[1] + self.row4[2] * B.row3[1] + A_row4_3 * B.row4[1],
-            self.row4[0] * B.row1[2] + self.row4[1] * B.row2[2] + self.row4[2] * B.row3[2] + A_row4_3 * B.row4[2]
-            ]
+        if type(B).__name__ == "matrix3":
+            C.row1 = [
+                self.row1[0] * B.row1[0] + self.row1[1] * B.row2[0] + self.row1[2] * B.row3[0] + A_row1_3 * B.row4[0],
+                self.row1[0] * B.row1[1] + self.row1[1] * B.row2[1] + self.row1[2] * B.row3[1] + A_row1_3 * B.row4[1],
+                self.row1[0] * B.row1[2] + self.row1[1] * B.row2[2] + self.row1[2] * B.row3[2] + A_row1_3 * B.row4[2]
+                ]
+            C.row2 = [
+                self.row2[0] * B.row1[0] + self.row2[1] * B.row2[0] + self.row2[2] * B.row3[0] + A_row2_3 * B.row4[0],
+                self.row2[0] * B.row1[1] + self.row2[1] * B.row2[1] + self.row2[2] * B.row3[1] + A_row2_3 * B.row4[1],
+                self.row2[0] * B.row1[2] + self.row2[1] * B.row2[2] + self.row2[2] * B.row3[2] + A_row2_3 * B.row4[2],
+                ]
+            C.row3 = [
+                self.row3[0] * B.row1[0] + self.row3[1] * B.row2[0] + self.row3[2] * B.row3[0] + A_row3_3 * B.row4[0],
+                self.row3[0] * B.row1[1] + self.row3[1] * B.row2[1] + self.row3[2] * B.row3[1] + A_row3_3 * B.row4[1],
+                self.row3[0] * B.row1[2] + self.row3[1] * B.row2[2] + self.row3[2] * B.row3[2] + A_row3_3 * B.row4[2]
+                ]
+            C.row4 = [
+                self.row4[0] * B.row1[0] + self.row4[1] * B.row2[0] + self.row4[2] * B.row3[0] + A_row4_3 * B.row4[0],
+                self.row4[0] * B.row1[1] + self.row4[1] * B.row2[1] + self.row4[2] * B.row3[1] + A_row4_3 * B.row4[1],
+                self.row4[0] * B.row1[2] + self.row4[1] * B.row2[2] + self.row4[2] * B.row3[2] + A_row4_3 * B.row4[2]
+                ]
+        elif (type(B).__name__ == "tuple" or type(B).__name__ == "list"):
+            C.row1 = [
+                self.row1[0] * [0][0] + self.row1[1] * [1][0] + self.row1[2] * [2][0] + A_row1_3 * [3][0],
+                self.row1[0] * [0][1] + self.row1[1] * [1][1] + self.row1[2] * [2][1] + A_row1_3 * [3][1],
+                self.row1[0] * [0][2] + self.row1[1] * [1][2] + self.row1[2] * [2][2] + A_row1_3 * [3][2]
+                ]
+            C.row2 = [
+                self.row2[0] * [0][0] + self.row2[1] * [1][0] + self.row2[2] * [2][0] + A_row2_3 * [3][0],
+                self.row2[0] * [0][1] + self.row2[1] * [1][1] + self.row2[2] * [2][1] + A_row2_3 * [3][1],
+                self.row2[0] * [0][2] + self.row2[1] * [1][2] + self.row2[2] * [2][2] + A_row2_3 * [3][2],
+                ]
+            C.row3 = [
+                self.row3[0] * [0][0] + self.row3[1] * [1][0] + self.row3[2] * [2][0] + A_row3_3 * [3][0],
+                self.row3[0] * [0][1] + self.row3[1] * [1][1] + self.row3[2] * [2][1] + A_row3_3 * [3][1],
+                self.row3[0] * [0][2] + self.row3[1] * [1][2] + self.row3[2] * [2][2] + A_row3_3 * [3][2]
+                ]
+            C.row4 = [
+                self.row4[0] * [0][0] + self.row4[1] * [1][0] + self.row4[2] * [2][0] + A_row4_3 * [3][0],
+                self.row4[0] * [0][1] + self.row4[1] * [1][1] + self.row4[2] * [2][1] + A_row4_3 * [3][1],
+                self.row4[0] * [0][2] + self.row4[1] * [1][2] + self.row4[2] * [2][2] + A_row4_3 * [3][2]
+                ]
         return C
 
-def eulerAnglesToMatrix3 (rotXangle = 0.0, rotYangle = 0.0, rotZangle = 0.0):
+
+def eulerAnglesToMatrix3(rotXangle=0.0, rotYangle=0.0, rotZangle=0.0):
     # https://stackoverflow.com/a/47283530
     cosY = math.cos(rotZangle)
     sinY = math.sin(rotZangle)
@@ -354,13 +500,79 @@ def eulerAnglesToMatrix3 (rotXangle = 0.0, rotYangle = 0.0, rotZangle = 0.0):
     sinP = math.sin(rotYangle)
     cosR = math.cos(rotXangle)
     sinR = math.sin(rotXangle)
-    m = matrix3 (
+    m = matrix3(
         [cosP * cosY, cosP * sinY, -sinP],
         [sinR * cosY * sinP - sinY * cosR, cosY * cosR + sinY * sinP * sinR, cosP * sinR],
         [sinY * sinR + cosR * cosY * sinP, cosR * sinY * sinP - sinR * cosY, cosR * cosP],
         [0.0, 0.0, 0.0]
         )
     return m
+
+
+def transMatrix (t = [0.0, 0.0, 0.0]):
+    mat = matrix3 (
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+        (t[0],t[1],t[2])
+        )
+    return mat
+
+
+def inverse (mat = matrix3()):
+    return mat.inverse()
+
+
+def quatToMatrix3(q = [0.0, 0.0, 0.0, 0.0]):
+    """
+        Covert a quaternion into a full three-dimensional rotation matrix.
+     
+        Input
+        :param Q: A 4 element array representing the quaternion (q0,q1,q2,q3) 
+     
+        Output
+        :return: A 3x3 element matrix representing the full 3D rotation matrix. 
+                 This rotation matrix converts a point in the local reference 
+                 frame to a point in the global reference frame.
+    """
+    
+    sqw = q[3]*q[3]
+    sqx = q[0]*q[0]
+    sqy = q[1]*q[1]
+    sqz = q[2]*q[2]
+
+    # invs (inverse square length) is only required if quaternion is not already normalised
+    invs = 1.0
+    if (sqx + sqy + sqz + sqw) > 0.0: invs = 1.0 / (sqx + sqy + sqz + sqw)
+    m00 = ( sqx - sqy - sqz + sqw)*invs # since sqw + sqx + sqy + sqz =1/invs*invs
+    m11 = (-sqx + sqy - sqz + sqw)*invs
+    m22 = (-sqx - sqy + sqz + sqw)*invs
+    
+    tmp1 = q[0]*q[1]
+    tmp2 = q[2]*q[3]
+    m10 = 2.0 * (tmp1 + tmp2)*invs
+    m01 = 2.0 * (tmp1 - tmp2)*invs
+    
+    tmp1 = q[0]*q[2]
+    tmp2 = q[1]*q[3]
+    m20 = 2.0 * (tmp1 - tmp2)*invs
+    m02 = 2.0 * (tmp1 + tmp2)*invs
+    
+    tmp1 = q[1]*q[2]
+    tmp2 = q[0]*q[3]
+    m21 = 2.0 * (tmp1 + tmp2)*invs
+    m12 = 2.0 * (tmp1 - tmp2)*invs
+    
+    # 3x3 rotation matrix
+    mat = matrix3 (
+        (m00, m10, m20),
+        (m01, m11, m21),
+        (m02, m12, m22),
+        (0.0, 0.0, 0.0)
+        )
+    return mat
+
+
 
 class skinOps:
     mesh = None
@@ -429,8 +641,12 @@ class skinOps:
         if len(weight_array) == numWeights and numWeights > 0:
 
             # Erase Any Previous Weight
-            for g in self.mesh.data.vertices[vertex_integer].groups:
-                self.mesh.vertex_groups[g.index].add([vertex_integer], 0.0, 'REPLACE')
+            
+            #for g in self.mesh.data.vertices[vertex_integer].groups:
+            #    self.mesh.vertex_groups[g.index].add([vertex_integer], 0.0, 'REPLACE')
+            
+            for g in range(0, len(self.mesh.data.vertices[vertex_integer].groups)):
+                self.mesh.vertex_groups[g].add([vertex_integer], 0.0, 'REPLACE')
 
             # Add New Weights
             for i in range(0, numWeights):
@@ -666,7 +882,7 @@ class boneSys:
                 self.layer = bpy.data.collections.new(layerName)
                 bpy.context.scene.collection.children.link(self.layer)
             else:
-                self.layer = bpy.data.collections[bpy.context.view_layer.active_layer_collection.name]
+                self.layer = bpy.data.collections[0]
 
         # Check for Armature
         armName = armatureName
@@ -709,8 +925,8 @@ class boneSys:
             bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
         return None
 
-        def count(self):
-            return len(self.armature.data.bones)
+    def count(self):
+        return len(self.armature.data.bones)
 
     def getNodeByName(self, boneName):
         # self.editMode(True)
@@ -812,6 +1028,21 @@ class boneSys:
             b.matrix = matrix
             return True
         return False
+    
+    def getTransform(self, boneName):
+        # lol wtf does blender not store a transform for the bone???
+        mat=((1.0, 0.0, 0.0, 0.0), (0.0, 1.0, 0.0, 0.0), (0.0, 0.0, 1.0, 0.0), (1.0, 0.0, 0.0, 1.0))
+        b = self.getNodeByName(boneName)
+        if b != None:
+            mat = (
+                (b.matrix[0][0], b.matrix[0][1], b.matrix[0][2], 0.0),
+                (b.matrix[1][0], b.matrix[1][1], b.matrix[1][2], 0.0),
+                (b.matrix[2][0], b.matrix[2][1], b.matrix[2][2], 0.0),
+                (b.head[0] - self.armature.location[0],
+                b.head[1] - self.armature.location[1],
+                b.head[2] - self.armature.location[2], 1.0)
+                )
+        return mat
 
     def setVisibility(self, boneName, visSet=(
             True, False, False, False, False, False, False, False, False, False, False, False, False, False, False,
@@ -863,7 +1094,7 @@ class boneSys:
 
             # Create Bone
             b = self.armature.data.edit_bones.new(bName)
-            #b = self.armature.data.edit_bones.new(bName.decode('utf-8', 'replace'))
+            # b = self.armature.data.edit_bones.new(bName.decode('utf-8', 'replace'))
             b.name = bName
 
             # Set As Deform Bone
@@ -910,8 +1141,8 @@ class boneSys:
         # Exit Edit Mode
         self.editMode(False)
         return True
-    
-    def rebuildEndPositions (self, mscale=1.0):
+
+    def rebuildEndPositions(self, mscale=1.0):
         for b in self.armature.data.edit_bones:
             children = self.getChildren(b.name)
             if len(children) == 1:  # Only One Child, Link End to the Child
@@ -924,27 +1155,27 @@ class boneSys:
                     childPosAvg[1] += childPos[1]
                     childPosAvg[2] += childPos[2]
                 self.setEndPosition(b.name,
-                    (childPosAvg[0] / len(children),
-                    childPosAvg[1] / len(children),
-                    childPosAvg[2] / len(children))
-                    )
+                                    (childPosAvg[0] / len(children),
+                                     childPosAvg[1] / len(children),
+                                     childPosAvg[2] / len(children))
+                                    )
             elif b.parent != None:  # No Children use inverse of parent position
                 childPos = self.getPosition(b.name)
                 parPos = self.getPosition(b.parent.name)
-                
+
                 boneLength = distance(parPos, childPos)
                 boneLength = 0.04 * mscale
                 boneNorm = normalize(
                     (childPos[0] - parPos[0],
                      childPos[1] - parPos[1],
                      childPos[2] - parPos[2])
-                    )
-                
+                )
+
                 self.setEndPosition(b.name,
-                     (childPos[0] + boneLength * boneNorm[0],
-                      childPos[1] + boneLength * boneNorm[1],
-                      childPos[2] + boneLength * boneNorm[2])
-                     )
+                                    (childPos[0] + boneLength * boneNorm[0],
+                                     childPos[1] + boneLength * boneNorm[1],
+                                     childPos[2] + boneLength * boneNorm[2])
+                                    )
         return None
 
 
@@ -957,6 +1188,54 @@ def messageBox(message="", title="Message Box", icon='INFO'):
 
 def getNodeByName(nodeName):
     return bpy.context.scene.objects.get(nodeName)
+
+
+def hide(nodeObj=None):
+    if nodeObj != None:
+        nodeObj.hide_set(True)
+        nodeObj.hide_render = True
+        return True
+    return False
+
+
+def unhide(nodeObj=None):
+    if nodeObj != None:
+        nodeObj.hide_set(False)
+        nodeObj.hide_render = False
+        return True
+    return False
+
+
+def select(nodeObj=None):
+    if nodeObj != None:
+        for obj in bpy.context.selected_objects:
+            obj.select_set(False)
+        nodeObj.select_set(True)
+        bpy.context.view_layer.objects.active = nodeObj
+        return True
+    return False
+
+
+def selectmore(nodeObj=None):
+    if nodeObj != None:
+        nodeObj.select_set(True)
+        bpy.context.view_layer.objects.active = nodeObj
+        return True
+    return False
+
+
+def freeze(nodeObj=None):
+    if nodeObj != None:
+        nodeObj.hide_select(True)
+        return True
+    return False
+
+
+def unfreeze(nodeObj=None):
+    if nodeObj != None:
+        nodeObj.hide_select(False)
+        return True
+    return False
 
 
 def classof(nodeObj):
@@ -993,38 +1272,34 @@ def getFileSize(filename):
 
 def doesFileExist(filename):
     file = Path(filename)
-    if file.is_file():
-        return True
-    elif file.is_dir():
-        return True
-    else:
-        return False
+    if file.is_file(): return True
+    elif file.is_dir(): return True
+    else: return False
 
 
 def clearListener(len=64):
     for i in range(0, len): print('')
 
 
-def getFiles(filepath = ""):
+def getFiles(filepath=""):
     files = []
-    
+
     fpath = '.'
     pattern = "*.*"
-    
+
     # try to split the pattern from the path
     index = filepath.rfind('/')
     if index < 0: index = filepath.rfind('\\')
     if index > -1:
         fpath = filepath[0:index + 1]
         pattern = filepath[index + 1:]
-    
-    #print("fpath:\t%s" % fpath)
-    #print("pattern:\t%s" % pattern)
-    
+
+    # print("fpath:\t%s" % fpath)
+    # print("pattern:\t%s" % pattern)
+
     currentDirectory = Path(fpath)
     for currentFile in currentDirectory.glob(pattern):
         files.append(currentFile)
-
 
     return files
 
@@ -1051,6 +1326,7 @@ def toUpper(string):
 
 def toLower(string):
     return string.upper()
+
 
 def padString(string, length=2, padChar="0", toLeft=True):
     s = str(string)
@@ -1103,12 +1379,12 @@ def appendIfUnique(array, value):
 class StandardMaterial:
     data = None
     bsdf = None
-    
+
     maxWidth = 1024
     nodeHeight = 512
     nodeWidth = 256
     nodePos = [0.0, 256.0]
-    
+
     def __init__(self, name="Material"):
         # make material
         self.nodePos[0] -= self.nodeWidth
@@ -1132,11 +1408,11 @@ class StandardMaterial:
         nodeObj = self.data.node_tree.nodes.new(node_type)
         self.addNodeArea(nodeObj)
         return nodeObj
-    
+
     def attach(self, node_out, node_in):
         self.data.node_tree.links.new(node_in, node_out)
         return None
-    
+
     def detach(self, node_con):
         self.data.node_tree.links.remove(node_con.links[0])
         return None
@@ -1144,13 +1420,13 @@ class StandardMaterial:
     def AddColor(self, name="", colour=(0.0, 0.0, 0.0, 0.0)):
         rgbaColor = self.data.node_tree.nodes.new('ShaderNodeRGB')
         self.addNodeArea(rgbaColor)
-        if name !="":
+        if name != "":
             rgbaColor.label = name
         rgbaColor.outputs[0].default_value = (colour[0], colour[1], colour[2], colour[3])
         if self.bsdf != None and self.bsdf.inputs['Base Color'] == None:
             self.data.node_tree.links.new(self.bsdf.inputs['Base Color'], rgbaColor.outputs['Color'])
         return rgbaColor
-    
+
     def Bitmaptexture(self, filename="", alpha=False, name="ShaderNodeTexImage"):
         imageTex = self.data.node_tree.nodes.new('ShaderNodeTexImage')
         imageTex.label = name
@@ -1159,13 +1435,13 @@ class StandardMaterial:
             imageTex.image = bpy.data.images.load(
                 filepath=filename,
                 check_existing=False
-                )
+            )
             imageTex.image.name = filenameFromPath(filename)
             imageTex.image.colorspace_settings.name = 'sRGB'
             if not alpha:
                 imageTex.image.alpha_mode = 'NONE'
             else:
-                imageTex.image.alpha_mode = 'STRAIGHT' # PREMUL
+                imageTex.image.alpha_mode = 'STRAIGHT'  # PREMUL
         except:
             imageTex.image = bpy.data.images.new(
                 name=filename,
@@ -1173,7 +1449,7 @@ class StandardMaterial:
                 height=8,
                 alpha=False,
                 float_buffer=False
-                )
+            )
         return imageTex
 
     def diffuseMap(self, imageTex=None, alpha=False, name="ShaderNodeTexImage"):
@@ -1204,7 +1480,7 @@ class StandardMaterial:
             self.attach(normMap.outputs['Normal'], self.bsdf.inputs['Normal'])
         return imageMap
 
-    def specularMap(self, imageNode=None, invert=True, alpha=False, name="ShaderNodeTexImage"):
+    def specularMap(self, imageTex=None, invert=True, alpha=False, name="ShaderNodeTexImage"):
         imageMap = None
         if imageTex != None and self.bsdf != None:
             imageMap = self.Bitmaptexture(filename=imageTex, alpha=True, name=name)
@@ -1216,10 +1492,10 @@ class StandardMaterial:
             else:
                 self.data.node_tree.links.new(self.bsdf.inputs['Roughness'], imageMap.outputs['Color'])
         return imageMap
-        
+
     def pack_nodes_partition(self, array, begin, end):
         pivot = begin
-        for i in range(begin+1, end+1):
+        for i in range(begin + 1, end + 1):
             if array[i].dimensions[1] >= array[begin].dimensions[1]:
                 pivot += 1
                 array[i], array[pivot] = array[pivot], array[i]
@@ -1229,15 +1505,17 @@ class StandardMaterial:
     def pack_nodes_qsort(self, array, begin=0, end=None):
         if end is None:
             end = len(array) - 1
+
         def _quicksort(array, begin, end):
             if begin >= end:
                 return
             pivot = self.pack_nodes_partition(array, begin, end)
-            _quicksort(array, begin, pivot-1)
-            _quicksort(array, pivot+1, end)
+            _quicksort(array, begin, pivot - 1)
+            _quicksort(array, pivot + 1, end)
+
         return _quicksort(array, begin, end)
 
-    def pack_nodes (self, boxes = [], areaRatio = 0.95, padding = 0.0):
+    def pack_nodes(self, boxes=[], areaRatio=0.95, padding=0.0):
         # https://observablehq.com/@mourner/simple-rectangle-packing
         bArea = 0
         maxWidth = 0
@@ -1245,16 +1523,18 @@ class StandardMaterial:
             bArea += (boxes[i].dimensions.x + padding) * (boxes[i].dimensions.y + padding)
             maxWidth = max(maxWidth, (boxes[i].dimensions.x + padding))
 
-        self.pack_nodes_qsort(boxes) 
+        self.pack_nodes_qsort(boxes)
         startWidth = max(ceil(sqrt(bArea / areaRatio)), maxWidth)
         spaces = [[0, 0, 0, startWidth, startWidth * 2]]
         last = []
         for i in range(0, len(boxes)):
             for p in range(len(spaces) - 1, -1, -1):
-                if (boxes[i].dimensions.x + padding) > spaces[p][3] or (boxes[i].dimensions.y + padding) > spaces[p][4]: continue
+                if (boxes[i].dimensions.x + padding) > spaces[p][3] or (boxes[i].dimensions.y + padding) > spaces[p][
+                    4]: continue
                 boxes[i].location.x = spaces[p][0] - (boxes[i].dimensions.x + padding)
                 boxes[i].location.y = spaces[p][1] + (boxes[i].dimensions.y + padding)
-                if (boxes[i].dimensions.x + padding) == spaces[p][3] and (boxes[i].dimensions.y + padding) == spaces[p][4]:
+                if (boxes[i].dimensions.x + padding) == spaces[p][3] and (boxes[i].dimensions.y + padding) == spaces[p][
+                    4]:
                     last = spaces.pop()
                     if p < spaces.count: spaces[p] = last
                 elif (boxes[i].dimensions.y + padding) == spaces[p][4]:
@@ -1270,18 +1550,28 @@ class StandardMaterial:
                         0.0,
                         spaces[p][3] - (boxes[i].dimensions.x + padding),
                         (boxes[i].dimensions.y + padding)
-                        ])
+                    ])
                     spaces[p][1] += (boxes[i].dimensions.y + padding)
                     spaces[p][4] -= (boxes[i].dimensions.y + padding)
                 break
         return None
-    
+
     def sort(self):
         self.pack_nodes([n for n in self.data.node_tree.nodes if n.type != 'OUTPUT_MATERIAL'], 0.45, -10)
         for n in self.data.node_tree.nodes:
-            #print("%s\t%i\t%i\t%s" % (n.dimensions, n.width, n.height, n.name))
+            # print("%s\t%i\t%i\t%s" % (n.dimensions, n.width, n.height, n.name))
             n.update()
         return None
+
+
+def MultiMaterial(numsubs=1):
+    # this is a hack, blender doesn't have a multi material equelevent
+    mats = []
+    if numsubs > 0:
+        numMats = len(bpy.data.materials)
+        for i in range(0, numsubs):
+            mats.append(StandardMaterial("Material #" + str(numMats)))
+    return mats
 
 
 class fopen:
@@ -1312,7 +1602,7 @@ class fopen:
             self.little_endian = isLittleEndian
             self.isGood = False
 
-        return None
+        pass
 
     # def __del__(self):
     #    self.flush()
@@ -1372,7 +1662,7 @@ class fopen:
         try:
             struct.pack_into(pack, self.data, self.pos, value)
         except:
-            print('Pos:\t%i / %i (buf:%i) [val:%i:%i:%s]' % (self.pos, self.size, len(self.data), value, size, pack))
+            #print('Pos:\t%i / %i (buf:%i) [val:%i:%i:%s]' % (self.pos, self.size, len(self.data), value, size, pack))
             pass
         self.pos += size
         return None
@@ -1380,8 +1670,8 @@ class fopen:
     def set_pointer(self, offset):
         self.pos = offset
         return None
-    
-    def set_endian(self, isLittle = True):
+
+    def set_endian(self, isLittle=True):
         self.little_endian = isLittle
         return isLittle
 
@@ -1391,7 +1681,7 @@ def fclose(bitStream=fopen()):
     bitStream.isGood = False
 
 
-def fseek(bitStream=fopen(), offset = 0, dir = 0):
+def fseek(bitStream=fopen(), offset=0, dir=0):
     if dir == 0:
         bitStream.set_pointer(offset)
     elif dir == 1:
@@ -1441,9 +1731,9 @@ def readDouble(bitStream=fopen()):
 def readHalf(bitStream=fopen()):
     uint16 = bitStream.read_and_unpack('>H' if not bitStream.little_endian else '<H', 2)
     uint32 = (
-        (((uint16 & 0x03FF) << 0x0D) | ((((uint16 & 0x7C00) >> 0x0A) + 0x70) << 0x17)) |
-        (((uint16 >> 0x0F) & 0x00000001) << 0x1F)
-        )
+            (((uint16 & 0x03FF) << 0x0D) | ((((uint16 & 0x7C00) >> 0x0A) + 0x70) << 0x17)) |
+            (((uint16 >> 0x0F) & 0x00000001) << 0x1F)
+    )
     return struct.unpack('f', struct.pack('I', uint32))[0]
 
 
@@ -1507,35 +1797,59 @@ def writeString(bitStream=fopen(), string="", length=0):
             bitStream.pack_and_write('B', 1, 0)
     return None
 
-def mesh_validate (vertices=[], faces=[]):
-    #
-    # Returns True if mesh is BAD
-    #
-    # check face index bound
-    face_min = 0
-    face_max = len(vertices) - 1
+
+def mesh_validate(vertices=[], faces=[]):
+    # basic face index check
+    # blender will crash if the mesh data is bad
     
-    for face in faces:
-        for side in face:
-            if side < face_min or side > face_max:
-                print("Face Index Out of Range:\t[%i / %i]" % (side, face_max))
-                return True
-    return False
+    # Check an Array was given
+    result = (type(faces).__name__ == "tuple" or type(faces).__name__ == "list")
+    if result == True:
+        
+        # Check the the array is Not empty
+        if len(faces) > 0:
+            
+            # check that the face is a vector
+            if (type(faces[0]).__name__ == "tuple" or type(faces[0]).__name__ == "list"):
+                
+                # Calculate the Max face index from supplied vertices
+                face_min = 0
+                face_max = len(vertices) - 1
+                
+                # Check face indeices
+                for face in faces:
+                    for side in face:
+                        
+                        # Check face index is in range
+                        if side < face_min and side > face_max:
+                            print("MeshValidation: \tFace Index Out of Range:\t[%i / %i]" % (side, face_max))
+                            result = False
+                            break
+            else:
+                print("MeshValidation: \tFace In Array is Invalid")
+                result = False
+        else: print("MeshValidation: \tFace Array is Empty")
+    else:
+        print("MeshValidation: \tArray Invalid")
+        result = False
+    return result
+
+
 
 def mesh(
-    vertices=[],
-    faces=[],
-    materialIDs=[],
-    tverts=[],
-    normals=[],
-    colours=[],
-    materials=[],
-    mscale=1.0,
-    flipAxis=False,
-    obj_name="Object",
-    lay_name='',
-    position = (0.0, 0.0, 0.0)
-    ):
+        vertices=[],
+        faces=[],
+        materialIDs=[],
+        tverts=[],
+        normals=[],
+        colours=[],
+        materials=[],
+        mscale=1.0,
+        flipAxis=False,
+        obj_name="Object",
+        lay_name='',
+        position=(0.0, 0.0, 0.0)
+        ):
     #
     # This function is pretty, ugly
     # imports the mesh into blender
@@ -1543,7 +1857,7 @@ def mesh(
     # Clear Any Object Selections
     # for o in bpy.context.selected_objects: o.select = False
     bpy.context.view_layer.objects.active = None
-    
+
     # Get Collection (Layers)
     if lay_name != '':
         # make collection
@@ -1560,7 +1874,6 @@ def mesh(
                 layer = bpy.data.collections[bpy.context.view_layer.active_layer_collection.name]
             except:
                 layer = bpy.data.collections[0]
-    
 
     # make mesh
     msh = bpy.data.meshes.new('Mesh')
@@ -1569,7 +1882,7 @@ def mesh(
 
     # Apply vertex scaling
     # mscale *= bpy.context.scene.unit_settings.scale_length
-    
+
     if len(vertices) > 0:
         vertArray = [[float] * 3] * len(vertices)
         if flipAxis:
@@ -1588,13 +1901,13 @@ def mesh(
                 )
 
     # assign data from arrays
-    if mesh_validate(vertArray, faces):
+    if not mesh_validate(vertArray, faces):
         # Erase Mesh
         msh.user_clear()
         bpy.data.meshes.remove(msh)
         print("Mesh Deleted!")
         return None
-    
+
     msh.from_pydata(vertArray, [], faces)
 
     # set surface to smooth
@@ -1627,7 +1940,7 @@ def mesh(
                 msh.normals_split_custom_set(normArray)
 
         # create texture corrdinates
-        #print("tverts ", len(tverts))
+        # print("tverts ", len(tverts))
         # this is just a hack, i just add all the UVs into the same space <<<
         if len(tverts) > 0:
             uvw = msh.uv_layers.new()
@@ -1677,9 +1990,9 @@ def mesh(
     # However the check will throw false positives so
     # an additional or a replacement valatiation function
     # would be required
-    
+
     if msh.validate(clean_customdata=False):
-        print("Mesh Failed Validation")
+        print("Warning, Blender Deleted (" + obj_name + "), reason unspecified, likely empty")
 
     # Update Mesh
     msh.update()
@@ -1688,7 +2001,7 @@ def mesh(
     obj = bpy.data.objects.new(obj_name, msh)
     obj.location = position
     # obj.name = obj.name.replace(".", "_")
-
+    
     for i in range(0, len(materials)):
         if len(obj.material_slots) < (i + 1):
             # if there is no slot then we append to create the slot and assign
@@ -1703,13 +2016,14 @@ def mesh(
             else:
                 obj.material_slots[0].material = materials[i]
         # obj.active_material = obj.material_slots[i].material
+ 
 
     if len(materialIDs) == len(obj.data.polygons):
         for i in range(0, len(materialIDs)):
             obj.data.polygons[i].material_index = materialIDs[i]
             if materialIDs[i] > len(materialIDs):
                 materialIDs[i] = materialIDs[i] % len(materialIDs)
-            
+
     elif len(materialIDs) > 0:
         print("Error:\tMaterial Index Out of Range")
 
