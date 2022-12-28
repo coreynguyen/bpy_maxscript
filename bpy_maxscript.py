@@ -6,6 +6,10 @@
 # easier, so alot of these functions may be redundant..
 # ====================================================================================
 # ChangeLog:
+#   2022-12-28
+#       added writeHalf function in order to write half floats
+#       added function to convert a rotation matrix 4x3 to quaternion
+#
 #   2022-12-24
 #       fixed bad indents from using pyCharm to format the indents lol... fuuukk
 #       additional tweaks to the maxscript module, changed mesh validate
@@ -37,9 +41,9 @@ def format(text="", args=[]):
     i = 0
     if len(text) > 1 and text[len(text) - 1:len(text)] == "\n":
         text = text[0:-1]
-    
+
     isArr = (type(args).__name__ == "tuple" or type(args).__name__ == "list")
-    
+
     if isArr == True and len(args) > 0:
         for s in text:
             t = s
@@ -68,12 +72,15 @@ def format(text="", args=[]):
         print(text)
     return None
 
-def subString (s, start=0, end=-1, base=1):
+
+def subString(s, start=0, end=-1, base=1):
     # base is a starting index of 1 as used in maxscript
     start -= base
     if start < 0: start = 0
-    if end > -1: end += start
-    else: end = len(s)
+    if end > -1:
+        end += start
+    else:
+        end = len(s)
     return s[start:end:1]
 
 
@@ -182,7 +189,8 @@ class bit:
 
     def Get(integer1, integer2): return ((integer1 & (1 << integer2)) >> integer2)
 
-    def Set(integer1, integer2, boolean): return (integer1 ^ ((integer1 * 0 - (int(boolean))) ^ integer1) & ((integer1 * 0 + 1) << integer2))
+    def Set(integer1, integer2, boolean): return (
+                integer1 ^ ((integer1 * 0 - (int(boolean))) ^ integer1) & ((integer1 * 0 + 1) << integer2))
 
     def Shift(integer1, integer2): return ((integer1 >> -integer2) if integer2 < 0 else (integer1 << integer2))
 
@@ -201,26 +209,21 @@ def delete(objName):
 
 
 def delete_all():
-    import bpy
-    
     for obj in bpy.context.scene.objects:
-        
         bpy.data.objects.remove(obj, do_unlink=True)
     return None
 
 
-
-
 class LayerProperties:
     layer = None
-    
-    def __init__(self, name = ""):
+
+    def __init__(self, name=""):
         self.layer = bpy.data.collections.get(name)
-    
-    def addNode (self, obj = None):
+
+    def addNode(self, obj=None):
         result = False
         if obj != None and self.layer != None:
-            
+
             # Loop through all collections the obj is linked to
             for col in obj.users_collection:
                 # Unlink the object
@@ -230,17 +233,17 @@ class LayerProperties:
             self.layer.objects.link(obj)
             result = True
         return result
-    
-    
+
+
 class LayerManager:
-    
-    def getLayerFromName (name = ""):
+
+    def getLayerFromName(name=""):
         col = bpy.data.collections.get(name)
         result = None
         if col: result = LayerProperties(col.name)
         return result
-    
-    def newLayerFromName (name = ""):
+
+    def newLayerFromName(name=""):
         col = bpy.data.collections.new(name)
         col.name = name
         bpy.context.scene.collection.children.link(col)
@@ -282,7 +285,7 @@ class matrix3:
             self.row1 = [0.0, 0.0, 0.0]
             self.row2 = [0.0, 0.0, 0.0]
             self.row3 = [0.0, 0.0, 0.0]
-            
+
         elif rowA == 1:
             self.row1 = [1.0, 0.0, 0.0]
             self.row2 = [0.0, 1.0, 0.0]
@@ -309,11 +312,14 @@ class matrix3:
                 ", " + str(self.row4[1]) +
                 ", " + str(self.row4[2]) + "])"
         )
-    
-    def position (self, vec = [0.0, 0.0, 0.0]):
+
+    def setPosition(self, vec=[0.0, 0.0, 0.0]):
         self.row4 = [vec[0], vec[1], vec[2]]
         return None
-    
+
+    def position(self):
+        return self.row4
+
     def asMat3(self):
         return (
             (self.row1[0], self.row1[1], self.row1[2]),
@@ -321,7 +327,7 @@ class matrix3:
             (self.row3[0], self.row3[1], self.row3[2]),
             (self.row4[0], self.row4[1], self.row4[2])
         )
-    
+
     def asMat4(self):
         return (
             (self.row1[0], self.row1[1], self.row1[2], 0.0),
@@ -329,6 +335,57 @@ class matrix3:
             (self.row3[0], self.row3[1], self.row3[2], 0.0),
             (self.row4[0], self.row4[1], self.row4[2], 1.0)
         )
+
+    def asQuat(self):
+        r11 = self.row1[0]
+        r12 = self.row1[1]
+        r13 = self.row1[2]
+        r21 = self.row2[0]
+        r22 = self.row2[1]
+        r23 = self.row2[2]
+        r31 = self.row3[0]
+        r32 = self.row3[1]
+        r33 = self.row3[2]
+        q0 = (r11 + r22 + r33 + 1.0) / 4.0;
+        q1 = (r11 - r22 - r33 + 1.0) / 4.0;
+        q2 = (-r11 + r22 - r33 + 1.0) / 4.0;
+        q3 = (-r11 - r22 + r33 + 1.0) / 4.0;
+        if q0 < 0.0: q0 = 0.0
+        if q1 < 0.0: q1 = 0.0
+        if q2 < 0.0: q2 = 0.0
+        if q3 < 0.0: q3 = 0.0
+        q0 = sqrt(q0)
+        q1 = sqrt(q1)
+        q2 = sqrt(q2)
+        q3 = sqrt(q3)
+        if q0 >= q1 and q0 >= q2 and q0 >= q3:
+            q0 *= 1.0
+            q1 = q1 * 1.0 if (r32 - r23) >= 0.0 else q1 * -1.0
+            q2 = q2 * 1.0 if (r13 - r31) >= 0.0 else q2 * -1.0
+            q3 = q3 * 1.0 if (r21 - r12) >= 0.0 else q3 * -1.0
+        elif q1 >= q0 and q1 >= q2 and q1 >= q3:
+            q0 = q0 * 1.0 if (r32 - r23) >= 0.0 else q0 * -1.0
+            q1 *= 1.0
+            q2 = q2 * 1.0 if (r21 + r12) >= 0.0 else q2 * -1.0
+            q3 = q3 * 1.0 if (r13 + r31) >= 0.0 else q3 * -1.0
+        elif q2 >= q0 and q2 >= q1 and q2 >= q3:
+            q0 = q0 * 1.0 if (r13 - r31) >= 0.0 else q0 * -1.0
+            q1 = q1 * 1.0 if (r21 + r12) >= 0.0 else q1 * -1.0
+            q2 *= 1.0
+            q3 = q3 * 1.0 if (r32 + r23) >= 0.0 else q3 * -1.0
+        elif q3 >= q0 and q3 >= q1 and q3 >= q2:
+            q0 = q0 * 1.0 if (r21 - r12) >= 0.0 else q0 * -1.0
+            q1 = q1 * 1.0 if (r31 + r13) >= 0.0 else q1 * -1.0
+            q2 = q2 * 1.0 if (r32 + r23) >= 0.0 else q2 * -1.0
+            q3 *= 1.0
+        else:
+            format("error\n")
+        r = sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3)
+        q0 /= r
+        q1 /= r
+        q2 /= r
+        q3 /= r
+        return [q0, q1, q2, q3]
 
     def inverse(self):
         row1_3 = 0.0
@@ -452,43 +509,43 @@ class matrix3:
                 self.row1[0] * B.row1[0] + self.row1[1] * B.row2[0] + self.row1[2] * B.row3[0] + A_row1_3 * B.row4[0],
                 self.row1[0] * B.row1[1] + self.row1[1] * B.row2[1] + self.row1[2] * B.row3[1] + A_row1_3 * B.row4[1],
                 self.row1[0] * B.row1[2] + self.row1[1] * B.row2[2] + self.row1[2] * B.row3[2] + A_row1_3 * B.row4[2]
-                ]
+            ]
             C.row2 = [
                 self.row2[0] * B.row1[0] + self.row2[1] * B.row2[0] + self.row2[2] * B.row3[0] + A_row2_3 * B.row4[0],
                 self.row2[0] * B.row1[1] + self.row2[1] * B.row2[1] + self.row2[2] * B.row3[1] + A_row2_3 * B.row4[1],
                 self.row2[0] * B.row1[2] + self.row2[1] * B.row2[2] + self.row2[2] * B.row3[2] + A_row2_3 * B.row4[2],
-                ]
+            ]
             C.row3 = [
                 self.row3[0] * B.row1[0] + self.row3[1] * B.row2[0] + self.row3[2] * B.row3[0] + A_row3_3 * B.row4[0],
                 self.row3[0] * B.row1[1] + self.row3[1] * B.row2[1] + self.row3[2] * B.row3[1] + A_row3_3 * B.row4[1],
                 self.row3[0] * B.row1[2] + self.row3[1] * B.row2[2] + self.row3[2] * B.row3[2] + A_row3_3 * B.row4[2]
-                ]
+            ]
             C.row4 = [
                 self.row4[0] * B.row1[0] + self.row4[1] * B.row2[0] + self.row4[2] * B.row3[0] + A_row4_3 * B.row4[0],
                 self.row4[0] * B.row1[1] + self.row4[1] * B.row2[1] + self.row4[2] * B.row3[1] + A_row4_3 * B.row4[1],
                 self.row4[0] * B.row1[2] + self.row4[1] * B.row2[2] + self.row4[2] * B.row3[2] + A_row4_3 * B.row4[2]
-                ]
+            ]
         elif (type(B).__name__ == "tuple" or type(B).__name__ == "list"):
             C.row1 = [
                 self.row1[0] * [0][0] + self.row1[1] * [1][0] + self.row1[2] * [2][0] + A_row1_3 * [3][0],
                 self.row1[0] * [0][1] + self.row1[1] * [1][1] + self.row1[2] * [2][1] + A_row1_3 * [3][1],
                 self.row1[0] * [0][2] + self.row1[1] * [1][2] + self.row1[2] * [2][2] + A_row1_3 * [3][2]
-                ]
+            ]
             C.row2 = [
                 self.row2[0] * [0][0] + self.row2[1] * [1][0] + self.row2[2] * [2][0] + A_row2_3 * [3][0],
                 self.row2[0] * [0][1] + self.row2[1] * [1][1] + self.row2[2] * [2][1] + A_row2_3 * [3][1],
                 self.row2[0] * [0][2] + self.row2[1] * [1][2] + self.row2[2] * [2][2] + A_row2_3 * [3][2],
-                ]
+            ]
             C.row3 = [
                 self.row3[0] * [0][0] + self.row3[1] * [1][0] + self.row3[2] * [2][0] + A_row3_3 * [3][0],
                 self.row3[0] * [0][1] + self.row3[1] * [1][1] + self.row3[2] * [2][1] + A_row3_3 * [3][1],
                 self.row3[0] * [0][2] + self.row3[1] * [1][2] + self.row3[2] * [2][2] + A_row3_3 * [3][2]
-                ]
+            ]
             C.row4 = [
                 self.row4[0] * [0][0] + self.row4[1] * [1][0] + self.row4[2] * [2][0] + A_row4_3 * [3][0],
                 self.row4[0] * [0][1] + self.row4[1] * [1][1] + self.row4[2] * [2][1] + A_row4_3 * [3][1],
                 self.row4[0] * [0][2] + self.row4[1] * [1][2] + self.row4[2] * [2][2] + A_row4_3 * [3][2]
-                ]
+            ]
         return C
 
 
@@ -505,73 +562,72 @@ def eulerAnglesToMatrix3(rotXangle=0.0, rotYangle=0.0, rotZangle=0.0):
         [sinR * cosY * sinP - sinY * cosR, cosY * cosR + sinY * sinP * sinR, cosP * sinR],
         [sinY * sinR + cosR * cosY * sinP, cosR * sinY * sinP - sinR * cosY, cosR * cosP],
         [0.0, 0.0, 0.0]
-        )
+    )
     return m
 
 
-def transMatrix (t = [0.0, 0.0, 0.0]):
-    mat = matrix3 (
+def transMatrix(t=[0.0, 0.0, 0.0]):
+    mat = matrix3(
         (1.0, 0.0, 0.0),
         (0.0, 1.0, 0.0),
         (0.0, 0.0, 1.0),
-        (t[0],t[1],t[2])
-        )
+        (t[0], t[1], t[2])
+    )
     return mat
 
 
-def inverse (mat = matrix3()):
+def inverse(mat=matrix3()):
     return mat.inverse()
 
 
-def quatToMatrix3(q = [0.0, 0.0, 0.0, 0.0]):
+def quatToMatrix3(q=[0.0, 0.0, 0.0, 0.0]):
     """
         Covert a quaternion into a full three-dimensional rotation matrix.
-     
+
         Input
-        :param Q: A 4 element array representing the quaternion (q0,q1,q2,q3) 
-     
+        :param Q: A 4 element array representing the quaternion (q0,q1,q2,q3)
+
         Output
-        :return: A 3x3 element matrix representing the full 3D rotation matrix. 
-                 This rotation matrix converts a point in the local reference 
+        :return: A 3x3 element matrix representing the full 3D rotation matrix.
+                 This rotation matrix converts a point in the local reference
                  frame to a point in the global reference frame.
     """
-    
-    sqw = q[3]*q[3]
-    sqx = q[0]*q[0]
-    sqy = q[1]*q[1]
-    sqz = q[2]*q[2]
+
+    sqw = q[3] * q[3]
+    sqx = q[0] * q[0]
+    sqy = q[1] * q[1]
+    sqz = q[2] * q[2]
 
     # invs (inverse square length) is only required if quaternion is not already normalised
     invs = 1.0
     if (sqx + sqy + sqz + sqw) > 0.0: invs = 1.0 / (sqx + sqy + sqz + sqw)
-    m00 = ( sqx - sqy - sqz + sqw)*invs # since sqw + sqx + sqy + sqz =1/invs*invs
-    m11 = (-sqx + sqy - sqz + sqw)*invs
-    m22 = (-sqx - sqy + sqz + sqw)*invs
-    
-    tmp1 = q[0]*q[1]
-    tmp2 = q[2]*q[3]
-    m10 = 2.0 * (tmp1 + tmp2)*invs
-    m01 = 2.0 * (tmp1 - tmp2)*invs
-    
-    tmp1 = q[0]*q[2]
-    tmp2 = q[1]*q[3]
-    m20 = 2.0 * (tmp1 - tmp2)*invs
-    m02 = 2.0 * (tmp1 + tmp2)*invs
-    
-    tmp1 = q[1]*q[2]
-    tmp2 = q[0]*q[3]
-    m21 = 2.0 * (tmp1 + tmp2)*invs
-    m12 = 2.0 * (tmp1 - tmp2)*invs
-    
+    m00 = (sqx - sqy - sqz + sqw) * invs  # since sqw + sqx + sqy + sqz =1/invs*invs
+    m11 = (-sqx + sqy - sqz + sqw) * invs
+    m22 = (-sqx - sqy + sqz + sqw) * invs
+
+    tmp1 = q[0] * q[1]
+    tmp2 = q[2] * q[3]
+    m10 = 2.0 * (tmp1 + tmp2) * invs
+    m01 = 2.0 * (tmp1 - tmp2) * invs
+
+    tmp1 = q[0] * q[2]
+    tmp2 = q[1] * q[3]
+    m20 = 2.0 * (tmp1 - tmp2) * invs
+    m02 = 2.0 * (tmp1 + tmp2) * invs
+
+    tmp1 = q[1] * q[2]
+    tmp2 = q[0] * q[3]
+    m21 = 2.0 * (tmp1 + tmp2) * invs
+    m12 = 2.0 * (tmp1 - tmp2) * invs
+
     # 3x3 rotation matrix
-    mat = matrix3 (
+    mat = matrix3(
         (m00, m10, m20),
         (m01, m11, m21),
         (m02, m12, m22),
         (0.0, 0.0, 0.0)
-        )
+    )
     return mat
-
 
 
 class skinOps:
@@ -641,10 +697,10 @@ class skinOps:
         if len(weight_array) == numWeights and numWeights > 0:
 
             # Erase Any Previous Weight
-            
-            #for g in self.mesh.data.vertices[vertex_integer].groups:
+
+            # for g in self.mesh.data.vertices[vertex_integer].groups:
             #    self.mesh.vertex_groups[g.index].add([vertex_integer], 0.0, 'REPLACE')
-            
+
             for g in range(0, len(self.mesh.data.vertices[vertex_integer].groups)):
                 self.mesh.vertex_groups[g].add([vertex_integer], 0.0, 'REPLACE')
 
@@ -1021,17 +1077,16 @@ class boneSys:
                 pass
         return value
 
-    def setTransform(self, boneName,
-                     matrix=((1.0, 0.0, 0.0, 0.0), (0.0, 1.0, 0.0, 0.0), (0.0, 0.0, 1.0, 0.0), (1.0, 0.0, 0.0, 1.0))):
+    def setTransform(self, boneName, matrix=((1.0, 0.0, 0.0, 0.0), (0.0, 1.0, 0.0, 0.0), (0.0, 0.0, 1.0, 0.0), (1.0, 0.0, 0.0, 1.0))):
         b = self.getNodeByName(boneName)
         if b != None:
             b.matrix = matrix
             return True
         return False
-    
+
     def getTransform(self, boneName):
         # lol wtf does blender not store a transform for the bone???
-        mat=((1.0, 0.0, 0.0, 0.0), (0.0, 1.0, 0.0, 0.0), (0.0, 0.0, 1.0, 0.0), (1.0, 0.0, 0.0, 1.0))
+        mat = ((1.0, 0.0, 0.0, 0.0), (0.0, 1.0, 0.0, 0.0), (0.0, 0.0, 1.0, 0.0), (1.0, 0.0, 0.0, 1.0))
         b = self.getNodeByName(boneName)
         if b != None:
             mat = (
@@ -1039,9 +1094,9 @@ class boneSys:
                 (b.matrix[1][0], b.matrix[1][1], b.matrix[1][2], 0.0),
                 (b.matrix[2][0], b.matrix[2][1], b.matrix[2][2], 0.0),
                 (b.head[0] - self.armature.location[0],
-                b.head[1] - self.armature.location[1],
-                b.head[2] - self.armature.location[2], 1.0)
-                )
+                 b.head[1] - self.armature.location[1],
+                 b.head[2] - self.armature.location[2], 1.0)
+            )
         return mat
 
     def setVisibility(self, boneName, visSet=(
@@ -1272,9 +1327,12 @@ def getFileSize(filename):
 
 def doesFileExist(filename):
     file = Path(filename)
-    if file.is_file(): return True
-    elif file.is_dir(): return True
-    else: return False
+    if file.is_file():
+        return True
+    elif file.is_dir():
+        return True
+    else:
+        return False
 
 
 def clearListener(len=64):
@@ -1393,7 +1451,7 @@ class StandardMaterial:
         self.data.use_backface_culling = True
         self.bsdf = self.data.node_tree.nodes["Principled BSDF"]
         self.bsdf.label = "Standard"
-        return None
+        pass
 
     def addNodeArea(self, nodeObj):
         nodeObj.location.x = self.nodePos[0]
@@ -1662,7 +1720,7 @@ class fopen:
         try:
             struct.pack_into(pack, self.data, self.pos, value)
         except:
-            #print('Pos:\t%i / %i (buf:%i) [val:%i:%i:%s]' % (self.pos, self.size, len(self.data), value, size, pack))
+            # print('Pos:\t%i / %i (buf:%i) [val:%i:%i:%s]' % (self.pos, self.size, len(self.data), value, size, pack))
             pass
         self.pos += size
         return None
@@ -1733,7 +1791,7 @@ def readHalf(bitStream=fopen()):
     uint32 = (
             (((uint16 & 0x03FF) << 0x0D) | ((((uint16 & 0x7C00) >> 0x0A) + 0x70) << 0x17)) |
             (((uint16 >> 0x0F) & 0x00000001) << 0x1F)
-    )
+        )
     return struct.unpack('f', struct.pack('I', uint32))[0]
 
 
@@ -1786,6 +1844,73 @@ def writeDoube(bitStream=fopen(), value=0.0):
     bitStream.pack_and_write(fmt, 8, value)
     return None
 
+def writeHalf(bitStream=fopen(), value=0.0):
+    # https://galfar.vevb.net/wp/2011/16bit-half-float-in-pascaldelphi/
+
+    result = 0
+    Src = int(struct.pack("f", value))
+
+    # Extract sign, exponentonent, and mantissa from Single number
+    Sign = Src << 31
+    exponent = ((Src & 0x7F800000) << 23) - 127 + 15
+    Mantissa = Src & 0x007FFFFF
+    if exponent >= 0 and exponent <= 30:
+        # Simple case - round the significand and combine it with the sign and exponentonent
+        result = (Sign >> 15) | ((exponent >> 10) | ((Mantissa + 0x00001000) << 13))
+
+    else:
+        if Src == 0:
+            # Input float is zero - return zero
+            result = 0
+
+        else:
+            # Difficult case - lengthy conversion
+            if exponent <= 0:
+                if exponent <= -10:
+                    # Input float's value is less than HalfMin, return zero
+                    result = 0
+
+                else:
+                    # Float is a normalized Single whose magnitude is less than HalfNormMin.
+                    # We convert it to denormalized half.
+                    Mantissa = (Mantissa | 0x00800000) << (1 - exponent)
+                    # Round to nearest
+                    if (Mantissa | 0x00001000) >= 0:
+                        Mantissa = Mantissa + 0x00002000
+                    # Assemble Sign and Mantissa (exponent is zero to get denormalized number)
+                    result = (Sign >> 15) | (Mantissa << 13)
+
+
+            else:
+                if exponent == 255 - 127 + 15:
+                    if Mantissa == 0:
+                        # Input float is infinity, create infinity half with original sign
+                        result = (Sign >> 15) or 0x7C00
+
+                    else:
+                        # Input float is NaN, create half NaN with original sign and mantissa
+                        result = (Sign >> 15) | (0x7C00 | (Mantissa << 13))
+
+
+                else:
+                    # exponent is > 0 so input float is normalized Single
+                    # Round to nearest
+                    if (Mantissa & 0x00001000) >= 0:
+                        Mantissa = Mantissa + 0x00002000
+                        if (Mantissa & 0x00800000) >= 0:
+                            Mantissa = 0
+                            exponent = exponent + 1
+
+                    if exponent >= 30:
+                        # exponentonent overflow - return infinity half
+                        result = (Sign >> 15) | 0x7C00
+
+                    else:
+                        # Assemble normalized half
+                        result = (Sign >> 15) | ((exponent >> 10) | (Mantissa << 13))
+    self.writeShort(bitStream, result, unsigned)
+    return None
+
 
 def writeString(bitStream=fopen(), string="", length=0):
     strLen = len(string)
@@ -1801,25 +1926,25 @@ def writeString(bitStream=fopen(), string="", length=0):
 def mesh_validate(vertices=[], faces=[]):
     # basic face index check
     # blender will crash if the mesh data is bad
-    
+
     # Check an Array was given
     result = (type(faces).__name__ == "tuple" or type(faces).__name__ == "list")
     if result == True:
-        
+
         # Check the the array is Not empty
         if len(faces) > 0:
-            
+
             # check that the face is a vector
             if (type(faces[0]).__name__ == "tuple" or type(faces[0]).__name__ == "list"):
-                
+
                 # Calculate the Max face index from supplied vertices
                 face_min = 0
                 face_max = len(vertices) - 1
-                
+
                 # Check face indeices
                 for face in faces:
                     for side in face:
-                        
+
                         # Check face index is in range
                         if side < face_min and side > face_max:
                             print("MeshValidation: \tFace Index Out of Range:\t[%i / %i]" % (side, face_max))
@@ -1828,12 +1953,12 @@ def mesh_validate(vertices=[], faces=[]):
             else:
                 print("MeshValidation: \tFace In Array is Invalid")
                 result = False
-        else: print("MeshValidation: \tFace Array is Empty")
+        else:
+            print("MeshValidation: \tFace Array is Empty")
     else:
         print("MeshValidation: \tArray Invalid")
         result = False
     return result
-
 
 
 def mesh(
@@ -1849,7 +1974,7 @@ def mesh(
         obj_name="Object",
         lay_name='',
         position=(0.0, 0.0, 0.0)
-        ):
+):
     #
     # This function is pretty, ugly
     # imports the mesh into blender
@@ -1882,7 +2007,7 @@ def mesh(
 
     # Apply vertex scaling
     # mscale *= bpy.context.scene.unit_settings.scale_length
-
+    vertArray = []
     if len(vertices) > 0:
         vertArray = [[float] * 3] * len(vertices)
         if flipAxis:
@@ -2001,7 +2126,7 @@ def mesh(
     obj = bpy.data.objects.new(obj_name, msh)
     obj.location = position
     # obj.name = obj.name.replace(".", "_")
-    
+
     for i in range(0, len(materials)):
         if len(obj.material_slots) < (i + 1):
             # if there is no slot then we append to create the slot and assign
@@ -2016,7 +2141,6 @@ def mesh(
             else:
                 obj.material_slots[0].material = materials[i]
         # obj.active_material = obj.material_slots[i].material
- 
 
     if len(materialIDs) == len(obj.data.polygons):
         for i in range(0, len(materialIDs)):
@@ -2050,3 +2174,32 @@ def mesh(
     # bpy.context.scene.update()
 
     return obj
+
+
+def rancol4():
+    return (random.uniform(0.0, 1.0), random.uniform(0.0, 1.0), random.uniform(0.0, 1.0), 1.0)
+
+
+def rancol3():
+    return (random.uniform(0.0, 1.0), random.uniform(0.0, 1.0), random.uniform(0.0, 1.0))
+
+
+def deleteScene(include=[]):
+    if len(include) > 0:
+        # Exit and Interactions
+        if bpy.context.view_layer.objects.active != None:
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+        # Select All
+        bpy.ops.object.select_all(action='SELECT')
+
+        # Loop Through Each Selection
+        for o in bpy.context.view_layer.objects.selected:
+            for t in include:
+                if o.type == t:
+                    bpy.data.objects.remove(o, do_unlink=True)
+                    break
+
+        # De-Select All
+        bpy.ops.object.select_all(action='DESELECT')
+    return None
